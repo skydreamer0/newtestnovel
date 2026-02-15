@@ -28,9 +28,12 @@ const appEl = document.querySelector(".app");
 const menuBtn = document.getElementById("menu-btn");
 const themeToggleButtons = Array.from(document.querySelectorAll(".theme-toggle, #theme-toggle"));
 const searchInput = document.getElementById("search-input");
-const bottomEdgeScrollThresholdPx = 110;
+const bottomEdgeScrollThresholdPx = 96;
 const bottomEdgeScrollRatio = 0.82;
+const bottomEdgeTapMoveThresholdPx = 12;
+const bottomEdgeTapTimeThresholdMs = 260;
 let lastBottomEdgeScrollAt = 0;
+let bottomEdgeTapStart = null;
 
 let files = [];
 let activeIndex = -1;
@@ -491,20 +494,17 @@ function bindKeyboardNavigation() {
 }
 
 function bindBottomEdgeTouchScroll() {
-  const maybeScrollFromBottomEdge = (clientX, clientY, target) => {
-    const resolvedTarget =
-      target instanceof Element ? target : document.elementFromPoint(clientX, clientY);
-    if (!(resolvedTarget instanceof Element)) return;
-    if (resolvedTarget.closest(".sidebar, a, button, input, textarea, select, label")) return;
+  const isInteractiveTarget = (target) =>
+    target instanceof Element &&
+    Boolean(target.closest(".sidebar, a, button, input, textarea, select, label"));
+  const isInBottomEdgeZone = (clientY) => clientY >= window.innerHeight - bottomEdgeScrollThresholdPx;
 
+  const maybeScrollDown = () => {
     const selection = window.getSelection?.();
     if (selection && selection.type === "Range" && selection.toString().trim().length > 0) return;
 
-    const edgeStartY = window.innerHeight - bottomEdgeScrollThresholdPx;
-    if (clientY < edgeStartY) return;
-
     const now = Date.now();
-    if (now - lastBottomEdgeScrollAt < 480) return;
+    if (now - lastBottomEdgeScrollAt < 380) return;
     lastBottomEdgeScrollAt = now;
 
     window.scrollBy({
@@ -514,35 +514,112 @@ function bindBottomEdgeTouchScroll() {
     });
   };
 
-  document.addEventListener(
-    "pointerup",
-    (event) => {
-      if (event.defaultPrevented) return;
-      if (event.pointerType === "mouse" && event.button !== 0) return;
-      maybeScrollFromBottomEdge(event.clientX, event.clientY, event.target);
-    },
-    { passive: true },
-  );
+  const resetTapState = () => {
+    bottomEdgeTapStart = null;
+  };
 
-  document.addEventListener(
-    "touchend",
-    (event) => {
-      if (event.defaultPrevented) return;
-      const touch = event.changedTouches?.[0];
-      if (!touch) return;
-      maybeScrollFromBottomEdge(touch.clientX, touch.clientY, event.target);
-    },
-    { passive: true },
-  );
+  const onPointerDown = (event) => {
+    if (event.defaultPrevented) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (!isInBottomEdgeZone(event.clientY)) {
+      resetTapState();
+      return;
+    }
+    if (isInteractiveTarget(event.target)) {
+      resetTapState();
+      return;
+    }
 
-  document.addEventListener(
-    "click",
-    (event) => {
-      if (event.defaultPrevented || event.button !== 0) return;
-      maybeScrollFromBottomEdge(event.clientX, event.clientY, event.target);
-    },
-    { passive: true },
-  );
+    bottomEdgeTapStart = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      at: event.timeStamp,
+    };
+  };
+
+  const onPointerUp = (event) => {
+    if (!bottomEdgeTapStart) return;
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      resetTapState();
+      return;
+    }
+    if (event.pointerId !== bottomEdgeTapStart.pointerId) {
+      resetTapState();
+      return;
+    }
+    if (!isInBottomEdgeZone(event.clientY)) {
+      resetTapState();
+      return;
+    }
+    if (isInteractiveTarget(event.target)) {
+      resetTapState();
+      return;
+    }
+
+    const dx = event.clientX - bottomEdgeTapStart.x;
+    const dy = event.clientY - bottomEdgeTapStart.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const duration = event.timeStamp - bottomEdgeTapStart.at;
+    resetTapState();
+    if (distance > bottomEdgeTapMoveThresholdPx) return;
+    if (duration > bottomEdgeTapTimeThresholdMs) return;
+    maybeScrollDown();
+  };
+
+  const onTouchStartFallback = (event) => {
+    if ("PointerEvent" in window) return;
+    if (event.defaultPrevented) return;
+    if (event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    if (!isInBottomEdgeZone(touch.clientY)) {
+      resetTapState();
+      return;
+    }
+    if (isInteractiveTarget(event.target)) {
+      resetTapState();
+      return;
+    }
+    bottomEdgeTapStart = {
+      pointerId: "touch-fallback",
+      x: touch.clientX,
+      y: touch.clientY,
+      at: event.timeStamp,
+    };
+  };
+
+  const onTouchEndFallback = (event) => {
+    if ("PointerEvent" in window) return;
+    if (!bottomEdgeTapStart) return;
+    const touch = event.changedTouches?.[0];
+    if (!touch) {
+      resetTapState();
+      return;
+    }
+    if (!isInBottomEdgeZone(touch.clientY)) {
+      resetTapState();
+      return;
+    }
+    if (isInteractiveTarget(event.target)) {
+      resetTapState();
+      return;
+    }
+    const dx = touch.clientX - bottomEdgeTapStart.x;
+    const dy = touch.clientY - bottomEdgeTapStart.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const duration = event.timeStamp - bottomEdgeTapStart.at;
+    resetTapState();
+    if (distance > bottomEdgeTapMoveThresholdPx) return;
+    if (duration > bottomEdgeTapTimeThresholdMs) return;
+    maybeScrollDown();
+  };
+
+  document.addEventListener("pointerdown", onPointerDown, { passive: true });
+  document.addEventListener("pointerup", onPointerUp, { passive: true });
+  document.addEventListener("pointercancel", resetTapState, { passive: true });
+  document.addEventListener("touchstart", onTouchStartFallback, { passive: true });
+  document.addEventListener("touchend", onTouchEndFallback, { passive: true });
+  document.addEventListener("touchcancel", resetTapState, { passive: true });
 }
 
 async function init() {

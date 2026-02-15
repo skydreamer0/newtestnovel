@@ -171,6 +171,7 @@ body[data-theme="dark"] {
 
 .reader {
   padding: 26px 28px 38px;
+  touch-action: manipulation;
 }
 
 .reader-header {
