@@ -28,6 +28,9 @@ const appEl = document.querySelector(".app");
 const menuBtn = document.getElementById("menu-btn");
 const themeToggleButtons = Array.from(document.querySelectorAll(".theme-toggle, #theme-toggle"));
 const searchInput = document.getElementById("search-input");
+const bottomEdgeScrollThresholdPx = 72;
+const bottomEdgeScrollRatio = 0.82;
+let lastBottomEdgeScrollAt = 0;
 
 let files = [];
 let activeIndex = -1;
@@ -487,12 +490,43 @@ function bindKeyboardNavigation() {
   });
 }
 
+function bindBottomEdgeTouchScroll() {
+  document.addEventListener(
+    "pointerup",
+    (event) => {
+      if (event.pointerType !== "touch" || event.defaultPrevented) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (!contentEl.contains(target)) return;
+      if (target.closest("a, button, input, textarea, select, label")) return;
+
+      const selection = window.getSelection?.();
+      if (selection && selection.type === "Range" && selection.toString().trim().length > 0) return;
+
+      const edgeStartY = window.innerHeight - bottomEdgeScrollThresholdPx;
+      if (event.clientY < edgeStartY) return;
+
+      const now = Date.now();
+      if (now - lastBottomEdgeScrollAt < 220) return;
+      lastBottomEdgeScrollAt = now;
+
+      window.scrollBy({
+        top: Math.round(window.innerHeight * bottomEdgeScrollRatio),
+        left: 0,
+        behavior: "smooth",
+      });
+    },
+    { passive: true },
+  );
+}
+
 async function init() {
   initializeTheme();
   bindSidebarToggle();
   bindSearch();
   bindNavigation();
   bindKeyboardNavigation();
+  bindBottomEdgeTouchScroll();
   try {
     await loadFileList();
     setStatus("正在解析章節標題...");
