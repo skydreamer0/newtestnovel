@@ -39,7 +39,12 @@ body[data-theme="dark"] {
 .app {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 330px 1fr;
+  grid-template-columns: 330px minmax(0, 1fr);
+  transition: grid-template-columns 180ms ease;
+}
+
+.app.sidebar-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
 }
 
 .sidebar {
@@ -47,7 +52,13 @@ body[data-theme="dark"] {
   background: var(--sidebar-bg);
   padding: 20px 14px;
   overflow-y: auto;
-  transition: transform 180ms ease;
+  transition: transform 180ms ease, opacity 160ms ease;
+}
+
+.app.sidebar-collapsed .sidebar {
+  transform: translateX(-105%);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .sidebar-header {
@@ -171,6 +182,7 @@ body[data-theme="dark"] {
 
 .reader {
   padding: 26px 28px 38px;
+  min-width: 0;
   touch-action: manipulation;
 }
 
@@ -226,7 +238,7 @@ button:disabled {
 }
 
 .menu-btn {
-  display: none;
+  display: inline-flex;
 }
 
 .content {
@@ -271,10 +283,6 @@ button:disabled {
     box-shadow: 0 18px 36px rgba(0, 0, 0, 0.24);
   }
 
-  .app.sidebar-collapsed .sidebar {
-    transform: translateX(-105%);
-  }
-
   .reader {
     padding: 16px;
   }
@@ -282,10 +290,6 @@ button:disabled {
   .reader-header {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .menu-btn {
-    display: inline-flex;
   }
 
   .reader-header h2 {

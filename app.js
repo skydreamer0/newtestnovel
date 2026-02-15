@@ -445,12 +445,33 @@ function scrollToTopOnDesktop() {
   window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 }
 
+function updateSidebarToggleExpandedState() {
+  menuBtn.setAttribute("aria-expanded", String(!appEl.classList.contains("sidebar-collapsed")));
+}
+
 function bindSidebarToggle() {
+  const mobileQuery = window.matchMedia("(max-width: 980px)");
+
   menuBtn.addEventListener("click", () => {
     appEl.classList.toggle("sidebar-collapsed");
+    updateSidebarToggleExpandedState();
   });
-  if (window.matchMedia("(max-width: 980px)").matches) {
+  if (mobileQuery.matches) {
     appEl.classList.add("sidebar-collapsed");
+  }
+  updateSidebarToggleExpandedState();
+
+  const onViewportChange = (event) => {
+    if (event.matches) {
+      appEl.classList.add("sidebar-collapsed");
+    }
+    updateSidebarToggleExpandedState();
+  };
+
+  if (typeof mobileQuery.addEventListener === "function") {
+    mobileQuery.addEventListener("change", onViewportChange);
+  } else if (typeof mobileQuery.addListener === "function") {
+    mobileQuery.addListener(onViewportChange);
   }
 }
 
