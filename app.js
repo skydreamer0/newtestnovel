@@ -464,6 +464,31 @@ function bindEvents() {
     if (e.key.toLowerCase() === "t") els.themeToggle.click();
     if (e.key.toLowerCase() === "b") els.bookmarkBtn.click();
   });
+
+  // Click bottom area to page down
+  document.querySelector(".main-wrapper").addEventListener("click", (e) => {
+    // Ignore clicks on buttons, links, or interactive elements
+    if (e.target.closest("button, a, input, .bottom-nav, .top-nav, .nav-btn")) return;
+
+    const clickY = e.clientY;
+    const windowH = window.innerHeight;
+
+    // Only trigger when clicking in the bottom 30% of the viewport
+    if (clickY > windowH * 0.7) {
+      const scrollTop = window.scrollY;
+      const docHeight = document.body.scrollHeight - window.innerHeight;
+
+      // If already at the bottom, go to next chapter
+      if (scrollTop >= docHeight - 10) {
+        if (state.activeIndex < state.files.length - 1) {
+          loadChapter(state.files[state.activeIndex + 1].path);
+        }
+      } else {
+        // Scroll down by ~85% of viewport height for comfortable reading
+        window.scrollBy({ top: windowH * 0.85, behavior: "smooth" });
+      }
+    }
+  });
 }
 
 // --- Main ---

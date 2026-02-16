@@ -463,6 +463,13 @@ body {
   font-size: 1rem;
   cursor: pointer;
   transition: all 0.3s var(--ease-smooth);
+  text-align: center;
+  line-height: 1;
+}
+
+.nav-btn svg {
+  flex-shrink: 0;
+  display: block;
 }
 
 .nav-btn:hover:not(:disabled) {
