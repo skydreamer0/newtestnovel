@@ -456,6 +456,14 @@ function bindSidebarToggle() {
     appEl.classList.toggle("sidebar-collapsed");
     updateSidebarToggleExpandedState();
   });
+
+  const closeBtn = document.getElementById("sidebar-close-btn");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", () => {
+      appEl.classList.add("sidebar-collapsed");
+      updateSidebarToggleExpandedState();
+    });
+  }
   if (mobileQuery.matches) {
     appEl.classList.add("sidebar-collapsed");
   }
