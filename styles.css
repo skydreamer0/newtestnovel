@@ -191,7 +191,7 @@ body[data-theme="dark"] {
 }
 
 .reader {
-  padding: 26px 28px 38px;
+  padding: 26px 40px 38px;
   min-width: 0;
   touch-action: manipulation;
 }
@@ -321,7 +321,7 @@ button:disabled {
   }
 
   .reader {
-    padding: 16px;
+    padding: 16px 20px;
   }
 
   .reader-header {
@@ -335,9 +335,9 @@ button:disabled {
 
   .content {
     font-size: 1rem;
-    padding: 14px;
-    padding-left: max(14px, env(safe-area-inset-left));
-    padding-right: max(14px, env(safe-area-inset-right));
+    padding: 18px 22px;
+    padding-left: max(22px, env(safe-area-inset-left));
+    padding-right: max(22px, env(safe-area-inset-right));
   }
 
   .bottom-nav {
