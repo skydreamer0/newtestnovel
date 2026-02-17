@@ -24,11 +24,19 @@ def main():
             if file.endswith('.md'):
                 file_path = os.path.join(root, file)
                 try:
+                    rel_path = os.path.relpath(file_path, base_dir)
+                    # Filter for Volume 5 and onwards
+                    # Assumes folder naming convention like "第5卷_..." or "第6卷_..."
+                    match = re.search(r'第(\d+)卷', rel_path)
+                    if match:
+                        vol_num = int(match.group(1))
+                        if vol_num < 5:
+                            continue
+
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
                         count = count_words(content)
                         if count < threshold:
-                            rel_path = os.path.relpath(file_path, base_dir)
                             results.append((rel_path, count))
                 except Exception as e:
                     print(f"Error reading {file_path}: {e}")
@@ -36,10 +44,16 @@ def main():
     # Sort results by count ascending
     results.sort(key=lambda x: x[1])
 
-    print(f"{'章節':<50} | {'字數':<10}")
-    print("-" * 65)
-    for path, count in results:
-        print(f"{path:<50} | {count:<10}")
+    print(f"總共有 {len(results)} 章少於 3000 字。")
+    print("\n字數最少的 5 章：")
+    print("-" * 30)
+    for i, (path, count) in enumerate(results[:5], 1):
+        print(f"{i}. {path} ({count} 字)")
+    
+    # Optionally print all of them if needed, but keeping it brief for now.
+    # print("\n所有少於 3000 字的章節清單：")
+    # for path, count in results:
+    #     print(f"{count:4} : {path}")
 
 if __name__ == "__main__":
     main()
