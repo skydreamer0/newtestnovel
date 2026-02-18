@@ -50,6 +50,7 @@ const els = {
   bookmarkBtn: document.getElementById("bookmark-btn"),
   prevBtn: document.getElementById("prev-btn"),
   nextBtn: document.getElementById("next-btn"),
+  wordCount: document.getElementById("word-count"),
 };
 
 // --- Initialization ---
@@ -297,6 +298,11 @@ function naturalSort(a, b) {
   return a.localeCompare(b, "zh-Hant", { numeric: true, sensitivity: "base" });
 }
 
+function countWords(text) {
+  // Count non-whitespace characters
+  return (text.match(/\S/g) || []).length;
+}
+
 // --- Chapter Loading & Rendering ---
 
 async function loadChapter(path) {
@@ -324,6 +330,12 @@ async function loadChapter(path) {
     // Render
     els.chapterTitle.textContent = title;
     els.content.innerHTML = marked.parse(text);
+
+    // Update Word Count
+    const wc = countWords(text);
+    els.wordCount.textContent = `| ${wc} 字`;
+    els.wordCount.title = wc < 3000 ? "字數較少" : "字數充足";
+    els.wordCount.style.color = wc < 3000 ? "var(--accent)" : "var(--muted)";
 
     // Reset Scroll or Restore
     const savedPos = state.scrollPositions[path];

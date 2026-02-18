@@ -148,6 +148,7 @@ body {
   font-weight: 700;
   letter-spacing: -0.02em;
   background: linear-gradient(135deg, var(--ink) 0%, var(--muted) 100%);
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -363,8 +364,7 @@ body {
 }
 
 .nav-controls {
-  display: flex;
-  gap: 8px;
+  display: none;
 }
 
 .icon-btn {

@@ -11,10 +11,11 @@ def count_words(filepath):
         return f"Error: {e}"
 
 files = [
-    r"d:\專案\novel_Ratforge\章稿\第9卷_墜落地\第281章-男爵的獵犬.md",
-    r"d:\專案\novel_Ratforge\章稿\第9卷_墜落地\第282章-穿越神經荒漠.md",
-    r"d:\專案\novel_Ratforge\章稿\第9卷_墜落地\第283章-情緒殘響.md",
-    r"d:\專案\novel_Ratforge\章稿\第9卷_墜落地\第284章-代碼崩潰.md"
+    r"d:\專案\novel_Ratforge\章稿\第9卷_墜落地\第289章-以戰養戰.md",
+    r"d:\專案\novel_Ratforge\章稿\第9卷_墜落地\第290章-消化道陷阱.md",
+    r"d:\專案\novel_Ratforge\章稿\第9卷_墜落地\第291章-活死人大軍.md",
+    r"d:\專案\novel_Ratforge\章稿\第9卷_墜落地\第294章-反攻號角.md",
+    r"d:\專案\novel_Ratforge\章稿\第9卷_墜落地\第295章-恐懼的收割.md"
 ]
 
 print("Is File Path Valid?")
