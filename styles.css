@@ -587,3 +587,24 @@ body {
     height: 44px;
   }
 }
+
+/* TTS Pulse Animation */
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(184, 79, 44, 0.4);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgba(184, 79, 44, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(184, 79, 44, 0);
+  }
+}
+
+#tts-toggle.speaking {
+  color: var(--accent);
+  border-color: var(--accent);
+  animation: pulse-ring 2s infinite;
+}

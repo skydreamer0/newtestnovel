@@ -20,6 +20,12 @@ const state = {
   scrollPositions: {}, // Map<path, number>
   theme: "light",
   fontSize: 1.125,
+  tts: {
+    speaking: false,
+    paused: false,
+    utterance: null,
+    voice: null
+  }
 };
 
 // --- DOM Elements ---
@@ -38,6 +44,7 @@ const els = {
   menuBtn: document.getElementById("menu-btn"),
   sidebarCloseBtn: document.getElementById("sidebar-close-btn"),
   themeToggle: document.getElementById("theme-toggle"),
+  ttsToggle: document.getElementById("tts-toggle"),
   fontSizeInc: document.getElementById("font-size-inc"),
   fontSizeDec: document.getElementById("font-size-dec"),
   bookmarkBtn: document.getElementById("bookmark-btn"),
@@ -114,7 +121,71 @@ function applyFontSize() {
   saveState("fontSize");
 }
 
-// --- Core Logic: File Fetching & Parsing ---
+// --- Text-to-Speech (TTS) ---
+
+function initTTS() {
+  // Try to find a Chinese voice
+  const voices = window.speechSynthesis.getVoices();
+  state.tts.voice = voices.find(v => v.lang === "zh-TW" || v.lang === "zh-HK" || v.lang === "zh-CN");
+
+  // Voices render async in Chrome
+  window.speechSynthesis.onvoiceschanged = () => {
+    const voices = window.speechSynthesis.getVoices();
+    state.tts.voice = voices.find(v => v.lang === "zh-TW" || v.lang === "zh-HK" || v.lang === "zh-CN");
+  };
+}
+
+function stopTTS() {
+  window.speechSynthesis.cancel();
+  state.tts.speaking = false;
+  state.tts.paused = false;
+  updateTTSIcon();
+}
+
+function toggleTTS() {
+  if (state.tts.speaking && !state.tts.paused) {
+    // Pause or Stop? Let's just pause.
+    window.speechSynthesis.pause();
+    state.tts.paused = true;
+  } else if (state.tts.paused) {
+    window.speechSynthesis.resume();
+    state.tts.paused = false;
+  } else {
+    // Start speaking
+    const text = els.content.innerText; // Get text content only, stripped of HTML
+    if (!text) return;
+
+    const u = new SpeechSynthesisUtterance(text);
+    if (state.tts.voice) u.voice = state.tts.voice;
+    u.rate = 1.0;
+    u.pitch = 1.0;
+
+    u.onend = () => {
+      state.tts.speaking = false;
+      state.tts.paused = false;
+      updateTTSIcon();
+    };
+
+    window.speechSynthesis.speak(u);
+    state.tts.speaking = true;
+    state.tts.paused = false;
+  }
+  updateTTSIcon();
+}
+
+function updateTTSIcon() {
+  const svg = els.ttsToggle.querySelector("svg");
+  if (state.tts.speaking && !state.tts.paused) {
+    // Pause Icon
+    svg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />';
+    els.ttsToggle.classList.add("speaking");
+  } else {
+    // Play/Speaker Icon
+    svg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />';
+    els.ttsToggle.classList.remove("speaking");
+  }
+}
+
 
 function getApiUrl(path) {
   const branch = config.githubBranch;
@@ -229,6 +300,7 @@ function naturalSort(a, b) {
 // --- Chapter Loading & Rendering ---
 
 async function loadChapter(path) {
+  stopTTS(); // Stop reading when changing chapters
   const index = state.files.findIndex(f => f.path === path);
   if (index === -1) return;
 
@@ -416,6 +488,8 @@ function bindEvents() {
     applyTheme();
   };
 
+  els.ttsToggle.onclick = toggleTTS;
+
   els.fontSizeInc.onclick = () => {
     state.fontSize = Math.min(state.fontSize + 0.1, 2.0);
     applyFontSize();
@@ -500,8 +574,17 @@ async function init() {
   applyFontSize();
   bindEvents();
 
+  initTTS();
   await loadFileList();
   renderSidebar();
+
+  // Register Service Worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('SW Registered!', reg))
+      .catch(err => console.error('SW Failed', err));
+  }
+
 
   const params = new URLSearchParams(window.location.search);
   const file = params.get("file");
