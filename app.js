@@ -757,15 +757,15 @@ function handleTouchEnd(e) {
 
   // 3. Swipe Up: Open Bottom Panel
   // Condition: Start near bottom (last 20% or 100px), Move Up > 60px, Mostly vertical
-  const isBottomInternal = touchStartY > window.innerHeight - 120;
-  if (isBottomInternal && deltaY < -60 && absX < 50 && !state.bottomPanelOpen) {
+  const isBottomInternal = touchStartY > window.innerHeight * 0.7; // Relaxed: Bottom 30%
+  // 3. Swipe Up: Open Bottom Panel
+  if (isBottomInternal && deltaY < -40 && absX < 60 && !state.bottomPanelOpen) {
     toggleBottomPanel(true);
     return;
   }
 
   // 4. Swipe Down: Close Bottom Panel
-  // Condition: Panel Open, Move Down > 60px
-  if (state.bottomPanelOpen && deltaY > 60 && absX < 50) {
+  if (state.bottomPanelOpen && deltaY > 40 && absX < 60) {
     toggleBottomPanel(false);
     return;
   }
@@ -868,13 +868,31 @@ function bindEvents() {
     if (e.key.toLowerCase() === "b") els.bookmarkBtn.click();
   });
 
-  // Click bottom area to page down (infinite scroll handles next chapter)
+  // Click behavior: 
+  // 1. Center Tap -> Toggle Settings (Bottom Panel + Top Nav visibility logic if added later)
+  // 2. Bottom Tap -> Page Down
   document.querySelector(".main-wrapper").addEventListener("click", (e) => {
     if (e.target.closest("button, a, input, .bottom-nav, .top-nav, .nav-btn, .chapter-divider, .bottom-panel")) return;
 
     const clickY = e.clientY;
     const windowH = window.innerHeight;
+    const windowW = window.innerWidth;
 
+    // Mobile Center Tap Check (Middle 30% width & height)
+    // Only on mobile (<1024px) or if user prefers
+    if (window.innerWidth <= 1024) {
+      // Center zone roughly
+      const isCenter = clickY > windowH * 0.3 && clickY < windowH * 0.7 &&
+        e.clientX > windowW * 0.3 && e.clientX < windowW * 0.7;
+
+      if (isCenter) {
+        // Toggle Panel
+        toggleBottomPanel(!state.bottomPanelOpen);
+        return;
+      }
+    }
+
+    // Default Page Down for bottom area (and now top/bottom if not center)
     if (clickY > windowH * 0.7) {
       window.scrollBy({ top: windowH * 0.85, behavior: "smooth" });
     }
