@@ -35,6 +35,11 @@ const state = {
   bottomPanelOpen: false,
   ttsRate: 1.0,
   ttsStartMode: "current", // 'beginning', 'current', 'bookmark'
+
+  // TTS Internal State
+  ttsQueue: [],       // Array of strings to speak
+  ttsChunkIndex: 0,   // Current chunk index
+  ttsUtterance: null, // Current SpeechSynthesisUtterance
 };
 
 // --- Gesture State ---
@@ -180,7 +185,46 @@ function stopTTS() {
   window.speechSynthesis.cancel();
   state.tts.speaking = false;
   state.tts.paused = false;
+  state.ttsQueue = [];
+  state.ttsChunkIndex = 0;
   updateTTSIcon();
+}
+
+/**
+ * Enhanced TTS: Paragraph Chunking
+ */
+function playNextChunk() {
+  if (!state.tts.speaking) return;
+  if (state.tts.paused) return;
+
+  if (state.ttsChunkIndex >= state.ttsQueue.length) {
+    stopTTS();
+    return;
+  }
+
+  const text = state.ttsQueue[state.ttsChunkIndex];
+  const u = new SpeechSynthesisUtterance(text);
+
+  // Re-apply voice and rate for EACH chunk
+  if (state.tts.voice) u.voice = state.tts.voice;
+  u.rate = state.ttsRate;
+
+  // iOS Safari Fix: Keep utterance reference
+  state.ttsUtterance = u;
+
+  u.onend = () => {
+    state.ttsChunkIndex++;
+    playNextChunk();
+  };
+
+  u.onerror = (e) => {
+    console.warn("TTS Error", e);
+    // Try to skip to next chunk if error isn't fatal
+    state.ttsChunkIndex++;
+    setTimeout(playNextChunk, 100);
+  };
+
+  window.speechSynthesis.speak(u);
 }
 
 function toggleTTS() {
@@ -190,55 +234,51 @@ function toggleTTS() {
   } else if (state.tts.paused) {
     window.speechSynthesis.resume();
     state.tts.paused = false;
+    // If rate changed while paused, we might need to restart current chunk?
+    // For now, resume naturally.
   } else {
-    // Start speaking
-    let textToSpeak = "";
+    // START NEW
+    let fullText = "";
 
+    // 1. Gather Text
     if (state.ttsStartMode === "beginning") {
-      textToSpeak = els.content.innerText;
-    } else if (state.ttsStartMode === "bookmark") {
-      // Logic to find bookmark position? For now simple fallback
-      // Detailed implementation would require finding the specific element
-      textToSpeak = els.content.innerText;
+      fullText = els.content.innerText;
     } else {
-      // "current" - Find visible text
-      // We'll use a crude approximation: find the first visible paragraph
-      const paragraphs = els.content.querySelectorAll("p, h1, h2, h3, blockquote");
+      // "current" or "bookmark" -> effectively "from view"
+      // Detailed logic to find exactly where we are:
+      const elements = els.content.querySelectorAll("p, h1, h2, h3, blockquote, li");
       let startIndex = 0;
-      const viewportTop = window.scrollY + 100;
+      const viewportTop = window.scrollY + 80; // slightly offset header
 
-      for (let i = 0; i < paragraphs.length; i++) {
-        const rect = paragraphs[i].getBoundingClientRect();
-        if (rect.top + window.scrollY > viewportTop) {
+      for (let i = 0; i < elements.length; i++) {
+        const rect = elements[i].getBoundingClientRect();
+        if (rect.bottom > 80 && rect.top + window.scrollY > viewportTop) {
           startIndex = i;
-          break; // Found the first paragraph mostly below top
+          break;
         }
       }
 
-      // Collect text from here onwards
-      for (let i = startIndex; i < paragraphs.length; i++) {
-        textToSpeak += paragraphs[i].innerText + "\n";
+      const chunks = [];
+      for (let i = startIndex; i < elements.length; i++) {
+        const t = elements[i].innerText.trim();
+        if (t) chunks.push(t);
       }
-
-      if (!textToSpeak) textToSpeak = els.content.innerText; // Fallback
+      state.ttsQueue = chunks;
     }
 
-    if (!textToSpeak) return;
+    if (state.ttsStartMode === "beginning" && !state.ttsQueue.length) {
+      // Fallback if queue wasn't populated by "current" logic
+      // Split by paragraphs manually
+      state.ttsQueue = els.content.innerText.split(/\n+/).filter(t => t.trim().length > 0);
+    }
 
-    const u = new SpeechSynthesisUtterance(textToSpeak);
-    if (state.tts.voice) u.voice = state.tts.voice;
-    u.rate = state.ttsRate;
-    u.pitch = 1.0;
+    if (state.ttsQueue.length === 0) return;
 
-    u.onend = () => {
-      state.tts.speaking = false;
-      state.tts.paused = false;
-      updateTTSIcon();
-    };
-
-    window.speechSynthesis.speak(u);
     state.tts.speaking = true;
     state.tts.paused = false;
+    state.ttsChunkIndex = 0;
+
+    playNextChunk();
   }
   updateTTSIcon();
 }
@@ -755,15 +795,6 @@ function handleTouchEnd(e) {
     return;
   }
 
-  // 3. Swipe Up: Open Bottom Panel
-  // Condition: Start near bottom (last 20% or 100px), Move Up > 60px, Mostly vertical
-  const isBottomInternal = touchStartY > window.innerHeight * 0.7; // Relaxed: Bottom 30%
-  // 3. Swipe Up: Open Bottom Panel
-  if (isBottomInternal && deltaY < -40 && absX < 60 && !state.bottomPanelOpen) {
-    toggleBottomPanel(true);
-    return;
-  }
-
   // 4. Swipe Down: Close Bottom Panel
   if (state.bottomPanelOpen && deltaY > 40 && absX < 60) {
     toggleBottomPanel(false);
@@ -915,9 +946,11 @@ function bindEvents() {
 
     // Live update if speaking
     if (state.tts.speaking && !state.tts.paused) {
-      // SpeechSynthesis API doesn't support changing rate mid-utterance easily
-      // We have to restart. A bit abrupt, maybe just let next utterance pick it up?
-      // For now, simple let it apply to next.
+      // Cancel current chunk and restart it (or next) with new rate
+      // Since we can't seek within a chunk, restarting the *current* chunk is best
+      window.speechSynthesis.cancel();
+      // playNextChunk will carry state index
+      setTimeout(playNextChunk, 50);
     }
   };
   els.ttsStartSelect.onchange = (e) => {
