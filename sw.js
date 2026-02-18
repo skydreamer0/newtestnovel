@@ -1,9 +1,12 @@
-const CACHE_NAME = 'ratforge-reader-v6';
+const CACHE_NAME = 'ratforge-reader-v7';
 const ASSETS = [
     './',
     './index.html',
     './styles.css',
     './app.js',
+    './assets/favicon.png',
+    './assets/icon-192.png',
+    './assets/icon-512.png',
     'https://cdn.jsdelivr.net/npm/marked/marked.min.js'
 ];
 
