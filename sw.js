@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ratforge-reader-v4';
+const CACHE_NAME = 'ratforge-reader-v6';
 const ASSETS = [
     './',
     './index.html',

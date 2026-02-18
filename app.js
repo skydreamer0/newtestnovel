@@ -25,7 +25,11 @@ const state = {
     paused: false,
     utterance: null,
     voice: null
-  }
+  },
+  // Infinite scroll state
+  loadedChapters: [],   // Array of loaded chapter indices
+  isLoadingNext: false, // Prevent duplicate loading
+  observer: null,       // IntersectionObserver instance
 };
 
 // --- DOM Elements ---
@@ -94,6 +98,10 @@ function saveState(key) {
       localStorage.setItem("reader-theme", state.theme);
     } else if (key === "fontSize") {
       localStorage.setItem("reader-font-size", state.fontSize);
+    } else if (key === "lastRead") {
+      if (state.activeIndex >= 0) {
+        localStorage.setItem("reader-last-read", state.files[state.activeIndex].path);
+      }
     }
   } catch (e) {
     console.warn("Failed to save state", e);
@@ -305,15 +313,23 @@ function countWords(text) {
 
 // --- Chapter Loading & Rendering ---
 
+/**
+ * Load a chapter fresh (reset mode) — clears existing content.
+ * Called when clicking sidebar or navigating directly.
+ */
 async function loadChapter(path) {
-  stopTTS(); // Stop reading when changing chapters
+  stopTTS();
   const index = state.files.findIndex(f => f.path === path);
   if (index === -1) return;
 
+  // Reset infinite scroll state
+  state.loadedChapters = [];
+  state.isLoadingNext = false;
   state.activeIndex = index;
-  // Update UI immediately
+
   els.chapterTitle.textContent = "載入中...";
   els.content.style.opacity = "0.5";
+  els.content.innerHTML = "";
   updateActiveSidebarItem();
 
   try {
@@ -322,30 +338,30 @@ async function loadChapter(path) {
     if (!resp.ok) throw new Error("Chapter Load Failed");
     const text = await resp.text();
 
-    // Parse Title First
     const titleMatch = text.match(/^#\s+(.+)$/m);
     const title = titleMatch ? titleMatch[1].trim() : state.files[index].title;
-    state.files[index].title = title; // Update cache
+    state.files[index].title = title;
 
-    // Render
+    // Create chapter section
+    const section = createChapterSection(index, title, text);
+    els.content.innerHTML = "";
+    els.content.appendChild(section);
+
+    // Track loaded chapter
+    state.loadedChapters = [index];
+
+    // Add sentinel for infinite scroll
+    appendSentinel();
+
+    // Update header
     els.chapterTitle.textContent = title;
-    els.content.innerHTML = marked.parse(text);
+    updateWordCount(text);
 
-    // Update Word Count
-    const wc = countWords(text);
-    els.wordCount.textContent = `| ${wc} 字`;
-    els.wordCount.title = wc < 3000 ? "字數較少" : "字數充足";
-    els.wordCount.style.color = wc < 3000 ? "var(--accent)" : "var(--muted)";
-
-    // Reset Scroll or Restore
+    // Scroll
     const savedPos = state.scrollPositions[path];
-    if (savedPos) {
-      window.scrollTo({ top: savedPos, behavior: "auto" });
-    } else {
-      window.scrollTo({ top: 0, behavior: "auto" });
-    }
+    window.scrollTo({ top: savedPos || 0, behavior: "auto" });
 
-    // Animation
+    // Fade in
     els.content.style.opacity = "0";
     requestAnimationFrame(() => {
       els.content.style.transition = "opacity 0.6s ease-out";
@@ -355,12 +371,13 @@ async function loadChapter(path) {
     updateNavButtons();
     updateBookmarkUI();
 
-    // History State
+    // History
     const urlObj = new URL(window.location);
     urlObj.searchParams.set("file", path);
     window.history.replaceState({ path }, "", urlObj);
+    saveState("lastRead");
 
-    // Mobile: Close sidebar
+    // Mobile: close sidebar
     if (window.innerWidth <= 1024) {
       els.app.classList.add("sidebar-collapsed");
     }
@@ -373,6 +390,122 @@ async function loadChapter(path) {
   }
 }
 
+/**
+ * Create a DOM section for a chapter.
+ */
+function createChapterSection(index, title, rawText) {
+  const section = document.createElement("section");
+  section.className = "chapter-section";
+  section.dataset.chapterIndex = index;
+  section.dataset.chapterPath = state.files[index].path;
+  section.innerHTML = marked.parse(rawText);
+  return section;
+}
+
+/**
+ * Create a visual divider between chapters.
+ */
+function createChapterDivider(title) {
+  const divider = document.createElement("div");
+  divider.className = "chapter-divider";
+  divider.innerHTML = `
+    <div class="divider-line"></div>
+    <span class="divider-title">${title}</span>
+    <div class="divider-line"></div>
+  `;
+  return divider;
+}
+
+/**
+ * Append sentinel element for IntersectionObserver.
+ */
+function appendSentinel() {
+  // Remove old sentinel
+  const old = document.getElementById("load-sentinel");
+  if (old) old.remove();
+
+  const lastLoaded = state.loadedChapters[state.loadedChapters.length - 1];
+  // Don't add sentinel if we're at the last chapter
+  if (lastLoaded >= state.files.length - 1) return;
+
+  const sentinel = document.createElement("div");
+  sentinel.id = "load-sentinel";
+  sentinel.className = "load-sentinel";
+  sentinel.innerHTML = '<div class="loading-spinner"><div></div><div></div><div></div></div>';
+  els.content.appendChild(sentinel);
+
+  // Observe
+  if (state.observer) state.observer.disconnect();
+  state.observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && !state.isLoadingNext) {
+      appendNextChapter();
+    }
+  }, { rootMargin: "600px" });
+  state.observer.observe(sentinel);
+}
+
+/**
+ * Auto-append the next chapter below current content.
+ */
+async function appendNextChapter() {
+  if (state.isLoadingNext) return;
+  const lastLoaded = state.loadedChapters[state.loadedChapters.length - 1];
+  const nextIndex = lastLoaded + 1;
+  if (nextIndex >= state.files.length) return;
+
+  state.isLoadingNext = true;
+
+  try {
+    const file = state.files[nextIndex];
+    const url = getApiUrl(file.path);
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error("Load Failed");
+    const text = await resp.text();
+
+    const titleMatch = text.match(/^#\s+(.+)$/m);
+    const title = titleMatch ? titleMatch[1].trim() : file.title;
+    state.files[nextIndex].title = title;
+
+    // Remove old sentinel
+    const oldSentinel = document.getElementById("load-sentinel");
+    if (oldSentinel) oldSentinel.remove();
+
+    // Add divider + chapter section
+    const divider = createChapterDivider(title);
+    const section = createChapterSection(nextIndex, title, text);
+    els.content.appendChild(divider);
+    els.content.appendChild(section);
+
+    // Fade in the new section
+    section.style.opacity = "0";
+    requestAnimationFrame(() => {
+      section.style.transition = "opacity 0.8s ease-out";
+      section.style.opacity = "1";
+    });
+
+    // Track
+    state.loadedChapters.push(nextIndex);
+
+    // Re-add sentinel for next chapter
+    appendSentinel();
+
+  } catch (err) {
+    console.error("Failed to append next chapter:", err);
+  } finally {
+    state.isLoadingNext = false;
+  }
+}
+
+/**
+ * Update word count display.
+ */
+function updateWordCount(text) {
+  const wc = countWords(text);
+  els.wordCount.textContent = `| ${wc} 字`;
+  els.wordCount.title = wc < 3000 ? "字數較少" : "字數充足";
+  els.wordCount.style.color = wc < 3000 ? "var(--accent)" : "var(--muted)";
+}
+
 // --- Audio/Visual Progress & Interactions ---
 
 function updateReadingProgress() {
@@ -381,9 +514,48 @@ function updateReadingProgress() {
   const scrollPercent = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
   els.readingProgress.style.width = `${scrollPercent}%`;
 
-  if (state.activeIndex >= 0) {
-    const path = state.files[state.activeIndex].path;
-    state.scrollPositions[path] = scrollTop;
+  // Save scroll position for the first loaded chapter
+  if (state.loadedChapters.length > 0) {
+    const firstPath = state.files[state.loadedChapters[0]].path;
+    state.scrollPositions[firstPath] = scrollTop;
+  }
+
+  // Update title based on which chapter section is currently visible
+  updateVisibleChapterTitle();
+}
+
+/**
+ * Detect which chapter section is currently in view and update the header title.
+ */
+function updateVisibleChapterTitle() {
+  const sections = els.content.querySelectorAll(".chapter-section");
+  if (sections.length === 0) return;
+
+  const viewportMiddle = window.scrollY + window.innerHeight * 0.3;
+  let currentSection = sections[0];
+
+  for (const section of sections) {
+    const rect = section.getBoundingClientRect();
+    const sectionTop = rect.top + window.scrollY;
+    if (sectionTop <= viewportMiddle) {
+      currentSection = section;
+    } else {
+      break;
+    }
+  }
+
+  const idx = parseInt(currentSection.dataset.chapterIndex, 10);
+  if (!isNaN(idx) && idx !== state.activeIndex) {
+    state.activeIndex = idx;
+    els.chapterTitle.textContent = state.files[idx].title;
+    updateBookmarkUI();
+    updateActiveSidebarItem();
+
+    // Update URL silently
+    const urlObj = new URL(window.location);
+    urlObj.searchParams.set("file", state.files[idx].path);
+    window.history.replaceState({ path: state.files[idx].path }, "", urlObj);
+    saveState("lastRead");
   }
 }
 
@@ -442,10 +614,12 @@ function renderSidebar() {
       btn.onclick = () => loadChapter(file.path);
       if (state.activeIndex >= 0 && state.files[state.activeIndex].path === file.path) {
         btn.classList.add("active");
+        // Scroll sidebar to active item
         setTimeout(() => {
-          // Scroll sidebar to active item if needed
-          // btn.scrollIntoView({ block: "center", behavior: "smooth" });
-        }, 100);
+          if (btn.classList.contains("active")) {
+            btn.scrollIntoView({ block: "center", behavior: "smooth" });
+          }
+        }, 300);
       }
       groupDiv.appendChild(btn);
     });
@@ -551,28 +725,15 @@ function bindEvents() {
     if (e.key.toLowerCase() === "b") els.bookmarkBtn.click();
   });
 
-  // Click bottom area to page down
+  // Click bottom area to page down (infinite scroll handles next chapter)
   document.querySelector(".main-wrapper").addEventListener("click", (e) => {
-    // Ignore clicks on buttons, links, or interactive elements
-    if (e.target.closest("button, a, input, .bottom-nav, .top-nav, .nav-btn")) return;
+    if (e.target.closest("button, a, input, .bottom-nav, .top-nav, .nav-btn, .chapter-divider")) return;
 
     const clickY = e.clientY;
     const windowH = window.innerHeight;
 
-    // Only trigger when clicking in the bottom 30% of the viewport
     if (clickY > windowH * 0.7) {
-      const scrollTop = window.scrollY;
-      const docHeight = document.body.scrollHeight - window.innerHeight;
-
-      // If already at the bottom, go to next chapter
-      if (scrollTop >= docHeight - 10) {
-        if (state.activeIndex < state.files.length - 1) {
-          loadChapter(state.files[state.activeIndex + 1].path);
-        }
-      } else {
-        // Scroll down by ~85% of viewport height for comfortable reading
-        window.scrollBy({ top: windowH * 0.85, behavior: "smooth" });
-      }
+      window.scrollBy({ top: windowH * 0.85, behavior: "smooth" });
     }
   });
 }
@@ -599,14 +760,16 @@ async function init() {
 
 
   const params = new URLSearchParams(window.location.search);
-  const file = params.get("file");
+  const file = params.get("file") || localStorage.getItem("reader-last-read");
+
   if (file) {
-    loadChapter(file);
+    // If the file exists in our list, load it
+    const fileExists = state.files.some(f => f.path === file);
+    if (fileExists) {
+      loadChapter(file);
+    }
   } else if (state.files.length > 0) {
-    // Load current chapter from URL or just show welcome/first
-    // Maybe check hash?
-    // els.chapterTitle.textContent = "歡迎閱讀";
-    // els.content.innerHTML = "<p>請從左側目錄選擇章節開始閱讀。</p>";
+    // Optionally load first chapter if nothing else
   }
 }
 
