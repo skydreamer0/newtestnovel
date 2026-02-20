@@ -61,3 +61,47 @@ Output a list of recommended music insertion points in the following format:
 *   **Music Description**: A majestic yet terrifying reveal. Low frequency rumble evolving into a distorted choir.
 *   **AI Generation Prompt**: Epic sci-fi cinematic, dark choir, rising synth swell, mysterious, majestic, biological horror, granular texture, slow tempo, reverberated.
 
+
+## 5. 主題曲／長配樂生成 (Deep Blueprint Mode)
+
+當需要生成 **「卷期主題曲」** 或 **「核心場景配樂」** 時，請使用以下「深層藍圖」格式，而非簡單的提示詞。
+
+
+
+### Structure Template (Suno v3.5/v4 Master Prompt - 30s)
+
+> **CRITICAL RULE**: ALL MUSIC MUST BE EXACTLY 30 SECONDS.
+> **Prompting Strategy**: Use "Custom Mode". Put `[Tags]` in the Lyrics box for structure, and `Style Keywords` in the Style box.
+
+#### 1. Style / Genre (Put in "Style of Music" box)
+```text
+[Genre 1], [Genre 2], [Atmosphere], [Tempo], [Key Instruments]
+(e.g., "Industrial Techno, Dark Ambient, Aggressive, 140 BPM, Distorted Bass, Metallic Percussion")
+```
+
+#### 2. Structure / Meta-Tags (Put in "Lyrics" box)
+```text
+[Instrumental]
+[Mood: Dark, Tense]
+[Tempo: Fast]
+
+[0:00] [Intro]
+(Description of start: e.g., Low drone, wind blowing)
+
+[0:10] [Build]
+(Description of build: e.g., Rhythm enters, rising Shepard Tone)
+
+[0:20] [Drop]
+(Description of climax: e.g., Heavy bass impact, noise wall, chaos)
+
+[0:28] [Outro]
+[Fade Out]
+[End]
+```
+
+## 🎼 AI Generate Prompt (One-Shot Legacy Mode)
+```text
+30 second clip, [Genre], [Mood], [Key Sound Elements], [Specific Climax].
+```
+
+
